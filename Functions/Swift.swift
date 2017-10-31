@@ -183,8 +183,12 @@ struct Swift: Language {
             output.append(") {\n")
         }
         output.append("    return Function.A(producer: .\(name)(.init(")
-        writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-            output.append("o\($0 + 1).producer")
+        writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
+            if case .function? = parser.typesMap[$0.element] {
+                output.append("\($0.element)EncodeInternal(o\($0.offset + 1)).producer")
+            } else {
+                output.append("o\($0.offset + 1).producer")
+            }
         }
         output.append(")))")
         if let returnType = functionType.returnType, case .function = parser.typesMap[returnType]! {
@@ -328,8 +332,33 @@ struct Swift: Language {
                     } else {
                         return stack[Int(a.level)].arguments[Int(-a.step - 1)]
                     }
+                }\n\n
+            """)
+        for (name, type) in parser.types {
+            if case .function(let functionType) = type {
+                output.append("""
+                        private func \(name)Value(_ a: Function.A, in stack: [Runtime], symbols: Symbols) -> \(name) {
+                            let raw = value(a, in: stack)
+                            if let function = raw as? Function {
+                                return { self.run(function: function, symbols: symbols, stack: stack + [Runtime(arguments: [
+                    """)
+                writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
+                    output.append("$\($0)")
                 }
-
+                if let type = functionType.returnType {
+                    output.append("])]) as! \(nativeType(for: type)) }\n")
+                } else {
+                    output.append("])]) }\n")
+                }
+                output.append("""
+                            } else {
+                                return raw as! \(name)
+                            }
+                        }\n\n
+                    """)
+            }
+        }
+        output.append("""
                 private func run(function: Function, symbols: Symbols, stack: [Runtime]) -> Any {
                     let runtime = stack.last!
                     for (i, step) in function.steps.enumerated() {
@@ -345,23 +374,18 @@ struct Swift: Language {
                                     runtime.results[i] = raw\n
                     """)
             case .function(let functionType):
-                output.append("""
-                                case .\(name)(let a):
-                                    let raw = value(a.o1, in: stack)
-                                    let f: \(name)
-                                    if let function = raw as? Function {
-                                        f = \(name)Decode(function: function, symbols: symbols)
-                                    } else {
-                                        f = raw as! \(name)
-                                    }\n
-                    """)
+                output.append("            case .\(name)(let a):\n                ")
                 if functionType.returnType != nil {
-                    output.append("                runtime.results[i] = f(")
+                    output.append("runtime.results[i] = \(name)Value(a.o1, in: stack, symbols: symbols)(")
                 } else {
-                    output.append("                f(")
+                    output.append("\(name)Value(a.o1, in: stack, symbols: symbols)(")
                 }
                 writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
-                    output.append("value(a.o\($0.offset + 2), in: stack) as! \(nativeType(for: $0.element))")
+                    if case .function? = parser.typesMap[$0.element] {
+                        output.append("\($0.element)Value(a.o\($0.offset + 2), in: stack, symbols: symbols)")
+                    } else {
+                        output.append("value(a.o\($0.offset + 2), in: stack) as! \(nativeType(for: $0.element))")
+                    }
                 }
                 output.append(")\n")
             }
@@ -379,7 +403,11 @@ struct Swift: Language {
                 output.append("symbols.\(name)(")
             }
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
-                output.append("value(a.o\($0.offset + 1), in: stack) as! \(nativeType(for: $0.element))")
+                if case .function? = parser.typesMap[$0.element] {
+                    output.append("\($0.element)Value(a.o\($0.offset + 1), in: stack, symbols: symbols)")
+                } else {
+                    output.append("value(a.o\($0.offset + 1), in: stack) as! \(nativeType(for: $0.element))")
+                }
             }
             output.append(")\n")
         }
