@@ -12,18 +12,17 @@ Symbol:
 add(int32, int32) -> int32
 minus(int32, int32) -> int32
 randomop() -> binaryop
-#myif(bool, f, f) -> int32
 
 Function:
 f1: (int32, int32, int32) -> int32
-#f2: (binaryop) -> int32
+f2: (binaryop) -> int32
 f3: (int32, int32, int32, int32) -> int32
 f4: () -> int32
 f5: (int32, int32) -> binaryop
 ```
 
 **Usage (Swift)**
-```
+```Swift
 class Implementation: Symbols {
     func add(_ o1: Int32, _ o2: Int32) -> Int32 {
         return o1 + o2
@@ -43,3 +42,10 @@ let function = f1Decode(function: encoding, symbols: Implementation())
 
 assert(function(1, 2, 3) == -2)
 ```
+
+## Getting Started
+
+1. Write specification file (See sample input)
+1. Compile specification to protobuf file and source code file 1
+1. Compile protobuf file to source code file 2
+1. Add both source code file 1 and 2 to your project
