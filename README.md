@@ -23,6 +23,14 @@ f5: (int32, int32) -> binaryop
 
 **Usage (Swift)**
 ```Swift
+let encoding = f1Encode { o1, o2, o3 in
+    minus(
+        add(o1, 2 as Int32),
+        add(o2, o3)
+    )
+}
+```
+```Swift
 class Implementation: Symbols {
     func add(_ o1: Int32, _ o2: Int32) -> Int32 {
         return o1 + o2
@@ -35,11 +43,7 @@ class Implementation: Symbols {
     }
 }
 
-// protobuf message
-let encoding = f1Encode { o1, o2, o3 in minus(add(o1, 2 as Int32), add(o2, o3)) }
-
 let function = f1Decode(function: encoding, symbols: Implementation())
-
 assert(function(1, 2, 3) == -2)
 ```
 
