@@ -13,7 +13,7 @@ class Parser {
     }
     
     enum DeclarationType {
-        case basic
+        case basic(backed: Bool)
         case function(FunctionType)
     }
     
@@ -41,7 +41,8 @@ class Parser {
         case 2:
             let returnTypeName = parts[1].trimmingCharacters(in: .whitespaces)
             if typesMap[returnTypeName] == nil {
-                fatalError("Line \(i): Return type invalid")
+                types.append((returnTypeName, .basic(backed: false)))
+                typesMap[returnTypeName] = .basic(backed: false)
             }
             returnType = returnTypeName
         default:
@@ -57,7 +58,8 @@ class Parser {
             for typeName in argumentString.components(separatedBy: ",") {
                 let typeName = typeName.trimmingCharacters(in: .whitespaces)
                 if typesMap[typeName] == nil {
-                    fatalError("Line \(i): Argument type invalid")
+                    types.append((typeName, .basic(backed: false)))
+                    typesMap[typeName] = .basic(backed: false)
                 }
                 argumentTypes.append(typeName)
             }
@@ -102,8 +104,8 @@ class Parser {
                     if !line.isValidIdentifier {
                         fatalError("Line \(i): Type name invalid")
                     }
-                    types.append((line, .basic))
-                    typesMap[line] = .basic
+                    types.append((line, .basic(backed: true)))
+                    typesMap[line] = .basic(backed: true)
                 }
             case .symbols:
                 guard let index = line.index(of: "(") else {

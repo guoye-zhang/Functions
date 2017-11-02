@@ -30,8 +30,9 @@ struct Protobuf {
         output.append("        oneof producer {\n            Function function_raw = 1;\n")
         for (i, (name, type)) in parser.types.enumerated() {
             switch type {
-            case .basic:
+            case .basic(backed: true):
                 output.append("            \(name) \(name)_raw = \(i * 2 + 3);\n")
+            case .basic(backed: false): break
             case .function(let functionType):
                 output.append("            A\(functionType.argumentTypes.count + 1) \(name) = \(i * 2 + 3);\n")
             }

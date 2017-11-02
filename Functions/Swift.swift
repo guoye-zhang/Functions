@@ -105,15 +105,14 @@ struct Swift: Language {
         }
     }
     
-    private func writeBasicType(name: String, to output: inout String) {
-        let native = Swift.protobufTypeToNative[name]
-        let nativeName = native ?? name
+    private func writeBasicType(name: String, backed: Bool, to output: inout String) {
+        let nativeName = backed ? nativeType(for: name) : name
         output.append("""
             protocol \(nativeName)Producer: _Producer {}
             
             extension Function.A: \(nativeName)Producer {}\n\n
             """)
-        if native != nil {
+        if backed {
             output.append("""
                 extension \(nativeName): \(nativeName)Producer {
                     var producer: Function.A {
@@ -387,11 +386,12 @@ struct Swift: Language {
             """)
         for (name, type) in parser.types {
             switch type {
-            case .basic:
+            case .basic(backed: true):
                 output.append("""
                                 case .\(name)Raw(let raw):
                                     runtime.results[i] = raw\n
                     """)
+            case .basic(backed: false): break
             case .function(let functionType):
                 output.append("            case .\(name)(let a):\n                ")
                 if functionType.returnType != nil {
@@ -456,8 +456,8 @@ struct Swift: Language {
         
         for (name, type) in parser.types {
             switch type {
-            case .basic:
-                writeBasicType(name: name, to: &output)
+            case .basic(let backed):
+                writeBasicType(name: name, backed: backed, to: &output)
             case .function(let functionType):
                 writeTypealias(name: name, functionType: functionType, to: &output)
                 writeFunctionType(name: name, functionType: functionType, to: &output)
