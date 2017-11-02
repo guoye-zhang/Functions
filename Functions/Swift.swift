@@ -178,11 +178,11 @@ struct Swift: Language {
             output.append("_ o\($0.offset + 1): \(nativeType(for: $0.element))Producer")
         }
         if let type = functionType.returnType {
-            output.append(") -> \(nativeType(for: type))Producer {\n")
+            output.append(") -> \(nativeType(for: type))Producer {\n    return ")
         } else {
-            output.append(") {\n")
+            output.append(") {\n    ")
         }
-        output.append("    return Function.A(producer: .\(name)(.init(")
+        output.append("Function.A(producer: .\(name)(.init(")
         writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
             if case .function? = parser.typesMap[$0.element] {
                 output.append("\($0.element)EncodeInternal(o\($0.offset + 1)).producer")
