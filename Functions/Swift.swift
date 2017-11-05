@@ -127,18 +127,10 @@ struct Swift: Language {
         output.append("""
             extension Function.A {
                 var \(name): \(name)Producer {
-                    return {
+                    return { Function.A(producer: .\(name)(.init(self
             """)
-        if functionType.argumentTypes.count > 0 {
-            output.append(" ")
-            writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-                output.append("o\($0 + 1)")
-            }
-            output.append(" in")
-        }
-        output.append(" Function.A(producer: .\(name)(.init(self")
         for i in functionType.argumentTypes.indices {
-            output.append(", o\(i + 1).producer")
+            output.append(", $\(i).producer")
         }
         output.append(")))")
         if let returnType = functionType.returnType, case .function = parser.typesMap[returnType]! {
@@ -247,17 +239,10 @@ struct Swift: Language {
                 let decoderRuntime = DecoderRuntime()
                 return {
             """)
-        if functionType.argumentTypes.count > 0 {
-            output.append(" ")
-            writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-                output.append("o\($0 + 1)")
-            }
-            output.append(" in")
-        }
         if let type = functionType.returnType, case .function? = parser.typesMap[type] {
             output.append("\n        let result = decoderRuntime.run(function: function, symbols: symbols, arguments: [")
             writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-                output.append("o\($0 + 1)")
+                output.append("$\($0)")
             }
             output.append("""
                 ])
@@ -272,7 +257,7 @@ struct Swift: Language {
         } else {
             output.append(" decoderRuntime.run(function: function, symbols: symbols, arguments: [")
             writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-                output.append("o\($0 + 1)")
+                output.append("$\($0)")
             }
             if let type = functionType.returnType {
                 output.append("]) as! \(nativeType(for: type)) }\n}\n\n")
@@ -284,18 +269,12 @@ struct Swift: Language {
     
     private func writeRun(name: String, functionType: Parser.FunctionType, to output: inout String) {
         output.append("private func \(name)Run(_ function: @escaping ([Any]) -> Any) -> \(name) {\n    return { ")
-        if functionType.argumentTypes.count > 0 {
-            writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-                output.append("o\($0 + 1)")
-            }
-            output.append(" in ")
-        }
         if functionType.returnType == nil {
             output.append("_ = ")
         }
         output.append("function([")
         writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
-            output.append("o\($0 + 1)")
+            output.append("$\($0)")
         }
         if let type = functionType.returnType {
             output.append("]) as! \(nativeType(for: type)) }\n}\n\n")
