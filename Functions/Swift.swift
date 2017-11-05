@@ -54,12 +54,6 @@ extension Function.A {
     }
 
     var producer: Function.A { return self }
-}
-
-extension Function: _Producer {
-    var producer: Function.A {
-        return Function.A(producer: .functionRaw(self))
-    }
 }\n\n
 """
 
@@ -92,8 +86,7 @@ struct Swift: Language {
     private func writeArgumentsExtension(to output: inout String) {
         for i in parser.argumentNumber.sorted() {
             if i == 0 { continue }
-            output.append("extension Function.Producer.A\(i) {\n")
-            output.append("    init(")
+            output.append("extension Function.Producer.A\(i) {\n    init(")
             writeCommaSeparated(1...i, to: &output) {
                 output.append("_ o\($0): Function.A")
             }
@@ -103,6 +96,39 @@ struct Swift: Language {
             }
             output.append("    }\n}\n\n")
         }
+    }
+    
+    private func writeFunctionProducer(to output: inout String) {
+        output.append("""
+            extension Function: _Producer {
+                var producer: Function.A {
+                    let level = EncoderRuntime.runtime.level + 1
+                    if steps.count == 1 && returnStep.step == 0 && returnStep.level == level {
+                        switch steps[0].producer {\n
+            """)
+        for (name, type) in parser.types {
+            if case .function(let functionType) = type {
+                output.append("            case .\(name)(let a)?:\n")
+                if functionType.argumentTypes.count > 0 {
+                    output.append("                if ")
+                    for i in functionType.argumentTypes.indices {
+                        if i != 0 { output.append(" && ") }
+                        output.append("a.o\(i + 2).step == -\(i + 1) && a.o\(i + 2).level == level")
+                    }
+                    output.append(" {\n                    return a.o1\n                }\n")
+                } else {
+                    output.append("                return a.o1\n")
+                }
+            }
+        }
+        output.append("""
+                        default: break
+                        }
+                    }
+                    return Function.A(producer: .functionRaw(self))
+                }
+            }\n\n
+            """)
     }
     
     private func writeBasicType(name: String, backed: Bool, to output: inout String) {
@@ -419,6 +445,8 @@ struct Swift: Language {
         var output = template
         
         writeArgumentsExtension(to: &output)
+        
+        writeFunctionProducer(to: &output)
         
         for (name, type) in parser.types {
             switch type {
