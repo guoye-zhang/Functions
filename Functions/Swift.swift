@@ -217,10 +217,9 @@ struct Swift: Language {
         if let returnType = functionType.returnType {
             output.append("    let returnStep = function(")
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
+                output.append("Function.A(argumentNumber: \($0.offset + 1))")
                 if case .function? = parser.typesMap[$0.element] {
-                    output.append("\($0.element)UnitProducer(Function.A(argumentNumber: \($0.offset + 1)))")
-                } else {
-                    output.append("Function.A(argumentNumber: \($0.offset + 1))")
+                    output.append(".\($0.element)")
                 }
             }
             if case .function? = parser.typesMap[returnType] {
@@ -231,27 +230,15 @@ struct Swift: Language {
         } else {
             output.append("    function(")
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
+                output.append("Function.A(argumentNumber: \($0.offset + 1))")
                 if case .function? = parser.typesMap[$0.element] {
-                    output.append("\($0.element)UnitProducer(Function.A(argumentNumber: \($0.offset + 1)))")
-                } else {
-                    output.append("Function.A(argumentNumber: \($0.offset + 1))")
+                    output.append(".\($0.element)")
                 }
             }
             output.append(")\n")
         }
         
         output.append("    return runtime.pop()\n}\n\n")
-    }
-    
-    private func writeUnitProducer(name: String, functionType: Parser.FunctionType, to output: inout String) {
-        output.append("""
-        private func \(name)UnitProducer(_ producer: Function.A) -> \(name)Producer {
-            return { Function.A(producer: .\(name)(.init(producer
-        """)
-        for i in functionType.argumentTypes.indices {
-            output.append(", $\(i).producer")
-        }
-        output.append("))) }\n}\n\n")
     }
     
     private func writeDecode(name: String, functionType: Parser.FunctionType, to output: inout String) {
@@ -462,7 +449,6 @@ struct Swift: Language {
                 writeTypealias(name: name, functionType: functionType, to: &output)
                 writeFunctionType(name: name, functionType: functionType, to: &output)
                 writeEncodeInternal(name: name, functionType: functionType, to: &output)
-                writeUnitProducer(name: name, functionType: functionType, to: &output)
                 writeDecode(name: name, functionType: functionType, to: &output)
                 writeRun(name: name, functionType: functionType, to: &output)
             }
