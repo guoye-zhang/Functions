@@ -272,7 +272,7 @@ struct Swift: Language {
             }
             output.append("""
                 ])
-                        if let function = result as? ([Any]) -> Any {
+                        if let function = result as? ([Any]) -> Any? {
                             return \(type)Run(function)
                         } else {
                             return result as! \(type)
@@ -294,7 +294,7 @@ struct Swift: Language {
     }
     
     private func writeRun(name: String, functionType: Parser.FunctionType, to output: inout String) {
-        output.append("private func \(name)Run(_ function: @escaping ([Any]) -> Any) -> \(name) {\n    return { ")
+        output.append("private func \(name)Run(_ function: @escaping ([Any]) -> Any?) -> \(name) {\n    return { ")
         if functionType.returnType == nil {
             output.append("_ = ")
         }
@@ -369,7 +369,7 @@ struct Swift: Language {
             }
         }
         output.append("""
-                private func run(function: Function, symbols: Symbols, stack: [Runtime]) -> Any {
+                private func run(function: Function, symbols: Symbols, stack: [Runtime]) -> Any? {
                     let runtime = stack.last!
                     for (i, step) in function.steps.enumerated() {
                         switch step.producer! {
@@ -425,6 +425,7 @@ struct Swift: Language {
         output.append("""
                         }
                     }
+                    if !function.hasReturnStep { return nil }
                     let returnValue = value(function.returnStep, in: stack)
                     if let function = returnValue as? Function {
                         return { self.run(function: function, symbols: symbols, stack: stack + [Runtime(arguments: $0)]) }
@@ -434,7 +435,7 @@ struct Swift: Language {
                 }
 
                 @discardableResult
-                func run(function: Function, symbols: Symbols, arguments: [Any]) -> Any {
+                func run(function: Function, symbols: Symbols, arguments: [Any]) -> Any? {
                     return run(function: function, symbols: symbols, stack: [Runtime(arguments: arguments)])
                 }
             }
