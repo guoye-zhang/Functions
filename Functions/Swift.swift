@@ -173,6 +173,9 @@ struct Swift: Language {
         // producer
         output.append("typealias \(name)Producer = (")
         writeCommaSeparated(functionType.argumentTypes, to: &output) {
+            if case .function? = parser.typesMap[$0] {
+                output.append("@escaping ")
+            }
             output.append("\(nativeType(for: $0))Producer")
         }
         if let type = functionType.returnType {
@@ -184,6 +187,9 @@ struct Swift: Language {
         // real
         output.append("typealias \(name) = (")
         writeCommaSeparated(functionType.argumentTypes, to: &output) {
+            if case .function? = parser.typesMap[$0] {
+                output.append("@escaping ")
+            }
             output.append("\(nativeType(for: $0))")
         }
         if let type = functionType.returnType {
@@ -318,7 +324,11 @@ struct Swift: Language {
         for (name, functionType) in parser.symbols {
             output.append("    func \(name)(")
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
-                output.append("_ o\($0.offset + 1): \(nativeType(for: $0.element))")
+                output.append("_ o\($0.offset + 1): ")
+                if case .function? = parser.typesMap[$0.element] {
+                    output.append("@escaping ")
+                }
+                output.append("\(nativeType(for: $0.element))")
             }
             if let type = functionType.returnType {
                 output.append(") -> \(nativeType(for: type))\n")
