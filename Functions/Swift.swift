@@ -387,7 +387,7 @@ struct Swift: Language {
                             if t != type { throw DecodeError(cause: .stepMismatch, stack: stepStack) }
                         } else {
                             guard a.step < step, case .functionRaw(let f)? = function.steps[Int(a.step)].producer else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
-                            switch type {
+                            switch type {\n
             """)
         for (name, type) in parser.types {
             if case .function(let functionType) = type {
