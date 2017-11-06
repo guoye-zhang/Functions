@@ -149,10 +149,10 @@ struct Swift: Language {
         }
     }
     
-    private func writeFunctionType(name: String, functionType: Parser.FunctionType, to output: inout String) {
+    private func writeUnitFunction(name: String, functionType: Parser.FunctionType, to output: inout String) {
         output.append("""
             extension Function.A {
-                var \(name): \(name)Producer {
+                var \(name)Unit: \(name)Producer {
                     return { Function.A(producer: .\(name)(.init(self
             """)
         for (i, type) in functionType.argumentTypes.enumerated() {
@@ -164,7 +164,7 @@ struct Swift: Language {
         }
         output.append(")))")
         if let returnType = functionType.returnType, case .function = parser.typesMap[returnType]! {
-            output.append(".\(returnType)")
+            output.append(".\(returnType)Unit")
         }
         output.append(" }\n    }\n}\n\n")
     }
@@ -219,7 +219,7 @@ struct Swift: Language {
         }
         output.append(")))")
         if let returnType = functionType.returnType, case .function = parser.typesMap[returnType]! {
-            output.append(".\(returnType)")
+            output.append(".\(returnType)Unit")
         }
         output.append("\n}\n\n")
     }
@@ -247,7 +247,7 @@ struct Swift: Language {
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
                 output.append("Function.A(argumentNumber: \($0.offset + 1))")
                 if case .function? = parser.typesMap[$0.element] {
-                    output.append(".\($0.element)")
+                    output.append(".\($0.element)Unit")
                 }
             }
             if case .function? = parser.typesMap[returnType] {
@@ -260,7 +260,7 @@ struct Swift: Language {
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
                 output.append("Function.A(argumentNumber: \($0.offset + 1))")
                 if case .function? = parser.typesMap[$0.element] {
-                    output.append(".\($0.element)")
+                    output.append(".\($0.element)Unit")
                 }
             }
             output.append(")\n")
@@ -609,7 +609,7 @@ struct Swift: Language {
                 writeBasicType(name: name, backed: backed, to: &output)
             case .function(let functionType):
                 writeTypealias(name: name, functionType: functionType, to: &output)
-                writeFunctionType(name: name, functionType: functionType, to: &output)
+                writeUnitFunction(name: name, functionType: functionType, to: &output)
                 writeEncodeInternal(name: name, functionType: functionType, to: &output)
                 writeDecode(name: name, functionType: functionType, to: &output)
                 writeRun(name: name, functionType: functionType, to: &output)
