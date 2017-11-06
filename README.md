@@ -43,7 +43,7 @@ class Implementation: Symbols {
     }
 }
 
-let function = f1Decode(function: encoding, symbols: Implementation())
+let function = try! f1Decode(function: encoding, symbols: Implementation())
 assert(function(1, 2, 3) == -2)
 ```
 

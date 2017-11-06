@@ -271,10 +271,18 @@ struct Swift: Language {
     
     private func writeDecode(name: String, functionType: Parser.FunctionType, to output: inout String) {
         output.append("""
-            func \(name)Decode(function: Function, symbols: Symbols) -> \(name) {
+            func \(name)Decode(function: Function, symbols: Symbols) throws -> \(name) {
                 let decoderRuntime = DecoderRuntime()
-                return {
+                try decoderRuntime.typecheck(function: function, arguments: [
             """)
+        writeCommaSeparated(functionType.argumentTypes, to: &output) {
+            output.append(".\($0)Type")
+        }
+        if let type = functionType.returnType {
+            output.append("], returnType: .\(type)Type)\n    return {")
+        } else {
+            output.append("], returnType: nil)\n    return {")
+        }
         if let type = functionType.returnType, case .function? = parser.typesMap[type] {
             output.append("\n        let result = decoderRuntime.run(function: function, symbols: symbols, arguments: [")
             writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
@@ -341,16 +349,133 @@ struct Swift: Language {
     
     private func writeDecoder(to output: inout String) {
         output.append("""
+            struct DecodeError: Error {
+                enum Cause {
+                    case argumentMismatch, stepMismatch, argumentMissing, stepMissing, returnMissing, invalidFormat
+                }
+                var cause: Cause
+                var stack: IndexPath
+            }
+
             private class DecoderRuntime {
-                private class Runtime {
-                    var results = [Int: Any]()
-                    let arguments: [Any]
-                    init(arguments: [Any]) {
+                private class Runtime<T> {
+                    var results = [Int: T]()
+                    let arguments: [T]
+                    let returnValue: T?
+                    init(arguments: [T], returnValue: T? = nil) {
                         self.arguments = arguments
+                        self.returnValue = returnValue
                     }
                 }
+                
+                private var releaseResult = [IndexPath: [Int: [Int]]]()
 
-                private func value(_ a: Function.A, in stack: [Runtime]) -> Any {
+                enum DeclarationType {
+                    case none\n
+            """)
+        for (name, _) in parser.types {
+            output.append("        case \(name)Type\n")
+        }
+        output.append("""
+                }
+
+                private func check(_ a: Function.A, with type: DeclarationType, step: Int, function: Function, stack: [Runtime<DeclarationType>], stepStack: IndexPath) throws {
+                    if a.step >= 0 {
+                        guard a.level < stack.count else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
+                        let runtime = stack[Int(a.level)]
+                        if let t = runtime.results[Int(a.step)] {
+                            if t != type { throw DecodeError(cause: .stepMismatch, stack: stepStack) }
+                        } else {
+                            guard a.step < step, case .functionRaw(let f)? = function.steps[Int(a.step)].producer else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
+                            switch type {
+            """)
+        for (name, type) in parser.types {
+            if case .function(let functionType) = type {
+                output.append("                case .\(name)Type:\n                    let nextRuntime = Runtime<DeclarationType>(arguments: [")
+                writeCommaSeparated(functionType.argumentTypes, to: &output) {
+                    output.append(".\($0)Type")
+                }
+                if let type = functionType.returnType {
+                    output.append("], returnValue: .\(type)Type)\n")
+                } else {
+                    output.append("])\n")
+                }
+                output.append("                    try typecheck(function: f, stack: stack + [nextRuntime], stepStack: stepStack)\n")
+            }
+        }
+        output.append("""
+                            default:
+                                throw DecodeError(cause: .stepMismatch, stack: stepStack)
+                            }
+                        }
+                    } else {
+                        guard a.level < stack.count else { throw DecodeError(cause: .argumentMissing, stack: stepStack) }
+                        let runtime = stack[Int(a.level)]
+                        let number = Int(-a.step - 1)
+                        guard number < runtime.arguments.count else { throw DecodeError(cause: .argumentMissing, stack: stepStack) }
+                        if runtime.arguments[number] != type { throw DecodeError(cause: .argumentMismatch, stack: stepStack) }
+                    }
+                }
+                
+                private func typecheck(function: Function, stack: [Runtime<DeclarationType>], stepStack: IndexPath) throws {
+                    let runtime = stack.last!
+                    for (i, step) in function.steps.enumerated() {
+                        let stepStack = stepStack.appending(i)
+                        guard let producer = step.producer else { throw DecodeError(cause: .invalidFormat, stack: stepStack) }
+                        switch producer {
+                        case .functionRaw: break\n
+            """)
+        for (name, type) in parser.types {
+            switch type {
+            case .basic(backed: true):
+                output.append("""
+                                case .\(name)Raw:
+                                    runtime.results[i] = .\(name)Type\n
+                    """)
+            case .basic(backed: false): break
+            case .function(let functionType):
+                output.append("            case .\(name)(let a):\n")
+                for (i, type) in ([name] + functionType.argumentTypes).enumerated() {
+                    output.append("                try check(a.o\(i + 1), with: .\(type)Type, step: i, function: function, stack: stack, stepStack: stepStack)\n")
+                }
+                if let type = functionType.returnType {
+                    output.append("                runtime.results[i] = .\(type)Type\n")
+                } else {
+                    output.append("                runtime.results[i] = .none\n")
+                }
+            }
+        }
+        
+        for (name, functionType) in parser.symbols {
+            if functionType.argumentTypes.count > 0 {
+                output.append("            case .\(name)(let a):\n")
+                for (i, type) in functionType.argumentTypes.enumerated() {
+                    output.append("                try check(a.o\(i + 1), with: .\(type)Type, step: i, function: function, stack: stack, stepStack: stepStack)\n")
+                }
+            } else {
+                output.append("            case .\(name):\n")
+            }
+            if let type = functionType.returnType {
+                output.append("                runtime.results[i] = .\(type)Type\n")
+            } else {
+                output.append("                runtime.results[i] = .none\n")
+            }
+        }
+        output.append("""
+                        }
+                    }
+                    if let returnType = runtime.returnValue {
+                        let stepStack = stepStack.appending(function.steps.count)
+                        guard function.hasReturnStep else { throw DecodeError(cause: .returnMissing, stack: stepStack) }
+                        try check(function.returnStep, with: returnType, step: function.steps.count, function: function, stack: stack, stepStack: stepStack)
+                    }
+                }
+                
+                func typecheck(function: Function, arguments: [DeclarationType], returnType: DeclarationType?) throws {
+                    try typecheck(function: function, stack: [Runtime(arguments: arguments, returnValue: returnType)], stepStack: [])
+                }
+
+                private func value(_ a: Function.A, in stack: [Runtime<Any>]) -> Any {
                     if a.step >= 0 {
                         return stack[Int(a.level)].results[Int(a.step)]!
                     } else {
@@ -361,7 +486,7 @@ struct Swift: Language {
         for (name, type) in parser.types {
             if case .function(let functionType) = type {
                 output.append("""
-                        private func \(name)Value(_ a: Function.A, in stack: [Runtime], symbols: Symbols) -> \(name) {
+                        private func \(name)Value(_ a: Function.A, in stack: [Runtime<Any>], symbols: Symbols) -> \(name) {
                             let raw = value(a, in: stack)
                             if let function = raw as? Function {
                                 return { self.run(function: function, symbols: symbols, stack: stack + [Runtime(arguments: [
@@ -383,7 +508,7 @@ struct Swift: Language {
             }
         }
         output.append("""
-                private func run(function: Function, symbols: Symbols, stack: [Runtime]) -> Any? {
+                private func run(function: Function, symbols: Symbols, stack: [Runtime<Any>]) -> Any? {
                     let runtime = stack.last!
                     for (i, step) in function.steps.enumerated() {
                         switch step.producer! {
