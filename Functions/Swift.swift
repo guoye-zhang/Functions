@@ -155,8 +155,12 @@ struct Swift: Language {
                 var \(name): \(name)Producer {
                     return { Function.A(producer: .\(name)(.init(self
             """)
-        for i in functionType.argumentTypes.indices {
-            output.append(", $\(i).producer")
+        for (i, type) in functionType.argumentTypes.enumerated() {
+            if case .function? = parser.typesMap[type] {
+                output.append(", \(type)EncodeInternal($\(i)).producer")
+            } else {
+                output.append(", $\(i).producer")
+            }
         }
         output.append(")))")
         if let returnType = functionType.returnType, case .function = parser.typesMap[returnType]! {
