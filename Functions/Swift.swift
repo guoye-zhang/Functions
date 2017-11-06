@@ -376,7 +376,7 @@ struct Swift: Language {
                     }
                 }
                 
-                private var releaseResult = [IndexPath: [Int: [Int]]]()
+                private var releaseResults = [IndexPath: [Int: [Int]]]()
 
                 enum DeclarationType {
                     case none\n
@@ -393,6 +393,7 @@ struct Swift: Language {
                         let runtime = stack[Int(a.level)]
                         if let t = runtime.results[Int(a.step)] {
                             if t != type { throw DecodeError(cause: .stepMismatch, stack: stepStack) }
+                            runtime.releaseResult[Int(a.step)] = stepStack[Int(a.level)]
                         } else {
                             guard a.step < function.steps.count, case .functionRaw(let f)? = function.steps[Int(a.step)].producer else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
                             switch type {\n
@@ -415,6 +416,7 @@ struct Swift: Language {
                             default:
                                 throw DecodeError(cause: .stepMismatch, stack: stepStack)
                             }
+                            runtime.releaseResult[Int(a.step)] = stepStack[Int(a.level)]
                         }
                     } else {
                         guard a.level < stack.count else { throw DecodeError(cause: .argumentMissing, stack: stepStack) }
@@ -477,6 +479,7 @@ struct Swift: Language {
                         guard function.hasReturnStep else { throw DecodeError(cause: .returnMissing, stack: stepStack) }
                         try check(function.returnStep, with: runtime.returnType, function: function, stack: stack, stepStack: stepStack)
                     } else if function.hasReturnStep { throw DecodeError(cause: .returnMismatch, stack: stepStack) }
+                    releaseResults[stepStack] = Dictionary(grouping: runtime.releaseResult.enumerated()) { $0.element }.mapValues { $0.map { $0.offset } }
                 }
                 
                 func typecheck(function: Function, arguments: [DeclarationType], returnType: DeclarationType) throws {
@@ -494,7 +497,7 @@ struct Swift: Language {
         for (name, type) in parser.types {
             if case .function(let functionType) = type {
                 output.append("""
-                        private func \(name)Value(_ a: Function.A, in stack: [Runtime<Any>], symbols: Symbols) -> \(name) {
+                        private func \(name)Value(_ a: Function.A, in stack: [Runtime<Any>], symbols: Symbols, stepStack: IndexPath) -> \(name) {
                             let raw = value(a, in: stack)
                             if let function = raw as? Function {
                                 return { self.run(function: function, symbols: symbols, stack: stack + [Runtime(arguments: [
@@ -503,9 +506,9 @@ struct Swift: Language {
                     output.append("$\($0)")
                 }
                 if let type = functionType.returnType {
-                    output.append("])]) as! \(nativeType(for: type)) }\n")
+                    output.append("])], stepStack: stepStack) as! \(nativeType(for: type)) }\n")
                 } else {
-                    output.append("])]) }\n")
+                    output.append("])], stepStack: stepStack) }\n")
                 }
                 output.append("""
                             } else {
@@ -517,9 +520,11 @@ struct Swift: Language {
         }
         output.append("""
                 @discardableResult
-                private func run(function: Function, symbols: Symbols, stack: [Runtime<Any>]) -> Any? {
+                private func run(function: Function, symbols: Symbols, stack: [Runtime<Any>], stepStack: IndexPath) -> Any? {
                     let runtime = stack.last!
+                    let releaseResult = releaseResults[stepStack]!
                     for (i, step) in function.steps.enumerated() {
+                        let stepStack = stepStack + [i]
                         switch step.producer! {
                         case .functionRaw(let raw):
                             runtime.results[i] = raw\n
@@ -535,13 +540,13 @@ struct Swift: Language {
             case .function(let functionType):
                 output.append("            case .\(name)(let a):\n                ")
                 if functionType.returnType != nil {
-                    output.append("runtime.results[i] = \(name)Value(a.o1, in: stack, symbols: symbols)(")
+                    output.append("runtime.results[i] = \(name)Value(a.o1, in: stack, symbols: symbols, stepStack: stepStack)(")
                 } else {
-                    output.append("\(name)Value(a.o1, in: stack, symbols: symbols)(")
+                    output.append("\(name)Value(a.o1, in: stack, symbols: symbols, stepStack: stepStack)(")
                 }
                 writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
                     if case .function? = parser.typesMap[$0.element] {
-                        output.append("\($0.element)Value(a.o\($0.offset + 2), in: stack, symbols: symbols)")
+                        output.append("\($0.element)Value(a.o\($0.offset + 2), in: stack, symbols: symbols, stepStack: stepStack)")
                     } else {
                         output.append("value(a.o\($0.offset + 2), in: stack) as! \(nativeType(for: $0.element))")
                     }
@@ -563,7 +568,7 @@ struct Swift: Language {
             }
             writeCommaSeparated(functionType.argumentTypes.enumerated(), to: &output) {
                 if case .function? = parser.typesMap[$0.element] {
-                    output.append("\($0.element)Value(a.o\($0.offset + 1), in: stack, symbols: symbols)")
+                    output.append("\($0.element)Value(a.o\($0.offset + 1), in: stack, symbols: symbols, stepStack: stepStack)")
                 } else {
                     output.append("value(a.o\($0.offset + 1), in: stack) as! \(nativeType(for: $0.element))")
                 }
@@ -572,11 +577,12 @@ struct Swift: Language {
         }
         output.append("""
                         }
+                        releaseResult[i]?.forEach { runtime.results[$0] = nil }
                     }
                     if !function.hasReturnStep { return nil }
                     let returnValue = value(function.returnStep, in: stack)
-                    if let function = returnValue as? Function {
-                        return { self.run(function: function, symbols: symbols, stack: stack + [Runtime(arguments: $0)]) }
+                    if let returnFunction = returnValue as? Function {
+                        return { self.run(function: returnFunction, symbols: symbols, stack: stack + [Runtime(arguments: $0)], stepStack: stepStack + [function.steps.count]) }
                     } else {
                         return returnValue
                     }
@@ -584,7 +590,7 @@ struct Swift: Language {
 
                 @discardableResult
                 func run(function: Function, symbols: Symbols, arguments: [Any]) -> Any? {
-                    return run(function: function, symbols: symbols, stack: [Runtime(arguments: arguments)])
+                    return run(function: function, symbols: symbols, stack: [Runtime(arguments: arguments)], stepStack: [])
                 }
             }
             """)
