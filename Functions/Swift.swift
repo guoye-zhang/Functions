@@ -379,14 +379,14 @@ struct Swift: Language {
         output.append("""
                 }
 
-                private func check(_ a: Function.A, with type: DeclarationType, step: Int, function: Function, stack: [Runtime<DeclarationType>], stepStack: IndexPath) throws {
+                private func check(_ a: Function.A, with type: DeclarationType, function: Function, stack: [Runtime<DeclarationType>], stepStack: IndexPath) throws {
                     if a.step >= 0 {
                         guard a.level < stack.count else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
                         let runtime = stack[Int(a.level)]
                         if let t = runtime.results[Int(a.step)] {
                             if t != type { throw DecodeError(cause: .stepMismatch, stack: stepStack) }
                         } else {
-                            guard a.step < step, case .functionRaw(let f)? = function.steps[Int(a.step)].producer else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
+                            guard a.step < function.steps.count, case .functionRaw(let f)? = function.steps[Int(a.step)].producer else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
                             switch type {\n
             """)
         for (name, type) in parser.types {
@@ -436,7 +436,7 @@ struct Swift: Language {
             case .function(let functionType):
                 output.append("            case .\(name)(let a):\n")
                 for (i, type) in ([name] + functionType.argumentTypes).enumerated() {
-                    output.append("                try check(a.o\(i + 1), with: .\(type)Type, step: i, function: function, stack: stack, stepStack: stepStack)\n")
+                    output.append("                try check(a.o\(i + 1), with: .\(type)Type, function: function, stack: stack, stepStack: stepStack)\n")
                 }
                 if let type = functionType.returnType {
                     output.append("                runtime.results[i] = .\(type)Type\n")
@@ -450,7 +450,7 @@ struct Swift: Language {
             if functionType.argumentTypes.count > 0 {
                 output.append("            case .\(name)(let a):\n")
                 for (i, type) in functionType.argumentTypes.enumerated() {
-                    output.append("                try check(a.o\(i + 1), with: .\(type)Type, step: i, function: function, stack: stack, stepStack: stepStack)\n")
+                    output.append("                try check(a.o\(i + 1), with: .\(type)Type, function: function, stack: stack, stepStack: stepStack)\n")
                 }
             } else {
                 output.append("            case .\(name):\n")
@@ -467,7 +467,7 @@ struct Swift: Language {
                     if let returnType = runtime.returnValue {
                         let stepStack = stepStack.appending(function.steps.count)
                         guard function.hasReturnStep else { throw DecodeError(cause: .returnMissing, stack: stepStack) }
-                        try check(function.returnStep, with: returnType, step: function.steps.count, function: function, stack: stack, stepStack: stepStack)
+                        try check(function.returnStep, with: returnType, function: function, stack: stack, stepStack: stepStack)
                     } else if function.hasReturnStep { throw DecodeError(cause: .returnMismatch, stack: stepStack) }
                 }
                 
