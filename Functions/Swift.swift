@@ -351,7 +351,7 @@ struct Swift: Language {
         output.append("""
             struct DecodeError: Error {
                 enum Cause {
-                    case argumentMismatch, stepMismatch, argumentMissing, stepMissing, returnMissing, invalidFormat
+                    case argumentMismatch, stepMismatch, returnMismatch, argumentMissing, stepMissing, returnMissing, invalidFormat
                 }
                 var cause: Cause
                 var stack: IndexPath
@@ -468,7 +468,7 @@ struct Swift: Language {
                         let stepStack = stepStack.appending(function.steps.count)
                         guard function.hasReturnStep else { throw DecodeError(cause: .returnMissing, stack: stepStack) }
                         try check(function.returnStep, with: returnType, step: function.steps.count, function: function, stack: stack, stepStack: stepStack)
-                    }
+                    } else if function.hasReturnStep { throw DecodeError(cause: .returnMismatch, stack: stepStack) }
                 }
                 
                 func typecheck(function: Function, arguments: [DeclarationType], returnType: DeclarationType?) throws {
@@ -508,6 +508,7 @@ struct Swift: Language {
             }
         }
         output.append("""
+                @discardableResult
                 private func run(function: Function, symbols: Symbols, stack: [Runtime<Any>]) -> Any? {
                     let runtime = stack.last!
                     for (i, step) in function.steps.enumerated() {
