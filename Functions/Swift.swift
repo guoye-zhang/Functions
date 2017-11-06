@@ -281,7 +281,7 @@ struct Swift: Language {
         if let type = functionType.returnType {
             output.append("], returnType: .\(type)Type)\n    return {")
         } else {
-            output.append("], returnType: nil)\n    return {")
+            output.append("], returnType: .none)\n    return {")
         }
         if let type = functionType.returnType, case .function? = parser.typesMap[type] {
             output.append("\n        let result = decoderRuntime.run(function: function, symbols: symbols, arguments: [")
@@ -361,10 +361,18 @@ struct Swift: Language {
                 private class Runtime<T> {
                     var results = [Int: T]()
                     let arguments: [T]
-                    let returnValue: T?
-                    init(arguments: [T], returnValue: T? = nil) {
+                    init(arguments: [T]) {
                         self.arguments = arguments
-                        self.returnValue = returnValue
+                    }
+                }
+
+                private class TypecheckRuntime: Runtime<DeclarationType> {
+                    let returnType: DeclarationType
+                    var releaseResult: [Int]
+                    init(arguments: [DeclarationType], returnType: DeclarationType, count: Int) {
+                        self.returnType = returnType
+                        releaseResult = Array(0..<count)
+                        super.init(arguments: arguments)
                     }
                 }
                 
@@ -379,7 +387,7 @@ struct Swift: Language {
         output.append("""
                 }
 
-                private func check(_ a: Function.A, with type: DeclarationType, function: Function, stack: [Runtime<DeclarationType>], stepStack: IndexPath) throws {
+                private func check(_ a: Function.A, with type: DeclarationType, function: Function, stack: [TypecheckRuntime], stepStack: IndexPath) throws {
                     if a.step >= 0 {
                         guard a.level < stack.count else { throw DecodeError(cause: .stepMissing, stack: stepStack) }
                         let runtime = stack[Int(a.level)]
@@ -391,16 +399,16 @@ struct Swift: Language {
             """)
         for (name, type) in parser.types {
             if case .function(let functionType) = type {
-                output.append("                case .\(name)Type:\n                    let nextRuntime = Runtime<DeclarationType>(arguments: [")
+                output.append("                case .\(name)Type:\n                    let nextRuntime = TypecheckRuntime(arguments: [")
                 writeCommaSeparated(functionType.argumentTypes, to: &output) {
                     output.append(".\($0)Type")
                 }
                 if let type = functionType.returnType {
-                    output.append("], returnValue: .\(type)Type)\n")
+                    output.append("], returnType: .\(type)Type")
                 } else {
-                    output.append("])\n")
+                    output.append("], returnType: .none")
                 }
-                output.append("                    try typecheck(function: f, stack: stack + [nextRuntime], stepStack: stepStack)\n")
+                output.append(", count: f.steps.count)\n                    try typecheck(function: f, stack: stack + [nextRuntime], stepStack: stepStack)\n")
             }
         }
         output.append("""
@@ -417,7 +425,7 @@ struct Swift: Language {
                     }
                 }
                 
-                private func typecheck(function: Function, stack: [Runtime<DeclarationType>], stepStack: IndexPath) throws {
+                private func typecheck(function: Function, stack: [TypecheckRuntime], stepStack: IndexPath) throws {
                     let runtime = stack.last!
                     for (i, step) in function.steps.enumerated() {
                         let stepStack = stepStack.appending(i)
@@ -464,15 +472,15 @@ struct Swift: Language {
         output.append("""
                         }
                     }
-                    if let returnType = runtime.returnValue {
+                    if runtime.returnType != .none {
                         let stepStack = stepStack.appending(function.steps.count)
                         guard function.hasReturnStep else { throw DecodeError(cause: .returnMissing, stack: stepStack) }
-                        try check(function.returnStep, with: returnType, function: function, stack: stack, stepStack: stepStack)
+                        try check(function.returnStep, with: runtime.returnType, function: function, stack: stack, stepStack: stepStack)
                     } else if function.hasReturnStep { throw DecodeError(cause: .returnMismatch, stack: stepStack) }
                 }
                 
-                func typecheck(function: Function, arguments: [DeclarationType], returnType: DeclarationType?) throws {
-                    try typecheck(function: function, stack: [Runtime(arguments: arguments, returnValue: returnType)], stepStack: [])
+                func typecheck(function: Function, arguments: [DeclarationType], returnType: DeclarationType) throws {
+                    try typecheck(function: function, stack: [TypecheckRuntime(arguments: arguments, returnType: returnType, count: function.steps.count)], stepStack: [])
                 }
 
                 private func value(_ a: Function.A, in stack: [Runtime<Any>]) -> Any {
