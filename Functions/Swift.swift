@@ -592,6 +592,81 @@ struct Swift: Language {
                 func run(function: Function, symbols: Symbols, arguments: [Any]) -> Any? {
                     return run(function: function, symbols: symbols, stack: [Runtime(arguments: arguments)], callStack: [])
                 }
+            }\n\n
+            """)
+    }
+    
+    private func writeTextualRepresentation(to output: inout String) {
+        output.append("""
+            extension Function.A: CustomStringConvertible {
+                var description: String {
+                    if step < 0 {
+                        return "$\\(level):\\(-step - 1)"
+                    } else {
+                        return "%\\(level):\\(step)"
+                    }
+                }
+            }
+
+            extension Function: CustomStringConvertible {
+                private func textualRepresentation(level: Int) -> String {
+                    let ident = (0..<level).reduce("") { ident, _ in ident + "    " }
+                    var rep = ""
+                    for (i, step) in steps.enumerated() {
+                        guard let producer = step.producer else { continue }
+                        rep.append(ident)
+                        switch producer {
+                        case .functionRaw(let f):
+                            rep.append("%\\(level):\\(i) = {\\n\\(f.textualRepresentation(level: level + 1))\\(ident)}\\n")\n
+            """)
+        for (name, type) in parser.types {
+            switch type {
+            case .basic(backed: true):
+                output.append("""
+                                case .\(name)Raw(let raw):
+                                    rep.append("%\\(level):\\(i) = (\(name))\\(raw)\\n")\n
+                    """)
+            case .basic(backed: false): break
+            case .function(let functionType):
+                output.append("            case .\(name)(let a):\n                rep.append(\"")
+                if functionType.returnType != nil {
+                    output.append("%\\(level):\\(i) = ")
+                }
+                output.append("\(name)(")
+                writeCommaSeparated(1...functionType.argumentTypes.count + 1, to: &output) {
+                    output.append("\\(a.o\($0))")
+                }
+                output.append(")\\n\")\n")
+            }
+        }
+        
+        for (name, functionType) in parser.symbols {
+            if functionType.argumentTypes.count > 0 {
+                output.append("            case .\(name)(let a):\n                rep.append(\"")
+            } else {
+                output.append("            case .\(name):\n                rep.append(\"")
+            }
+            if functionType.returnType != nil {
+                output.append("%\\(level):\\(i) = ")
+            }
+            output.append("\(name)(")
+            writeCommaSeparated(functionType.argumentTypes.indices, to: &output) {
+                output.append("\\(a.o\($0 + 1))")
+            }
+            output.append(")\\n\")\n")
+        }
+        output.append("""
+                        }
+                    }
+                    if hasReturnStep {
+                        rep.append("\\(ident)return \\(returnStep)\\n")
+                    }
+                    return rep
+                }
+            
+                var description: String {
+                    return textualRepresentation(level: 0)
+                }
             }
             """)
     }
@@ -630,6 +705,8 @@ struct Swift: Language {
         writeSymbolsProtocol(to: &output)
         
         writeDecoder(to: &output)
+        
+        writeTextualRepresentation(to: &output)
         
         try! output.write(to: url, atomically: true, encoding: .utf8)
     }
