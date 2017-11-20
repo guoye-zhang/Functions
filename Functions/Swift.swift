@@ -133,11 +133,15 @@ struct Swift: Language {
     
     private func writeBasicType(name: String, backed: Bool, to output: inout String) {
         let nativeName = backed ? nativeType(for: name) : name
-        output.append("""
-            protocol \(nativeName)Producer: _Producer {}
-            
-            extension Function.A: \(nativeName)Producer {}\n\n
-            """)
+        output.append("protocol \(nativeName)Producer: ")
+        if let types = parser.subtypesMap[name] {
+            writeCommaSeparated(types, to: &output) {
+                output.append("\(nativeType(for: $0))Producer")
+            }
+        } else {
+            output.append("_Producer")
+        }
+        output.append(" {}\n\nextension Function.A: \(nativeName)Producer {}\n\n")
         if backed {
             output.append("""
                 extension \(nativeName): \(nativeName)Producer {
@@ -384,7 +388,23 @@ struct Swift: Language {
         for (name, _) in parser.types {
             output.append("        case \(name)Type\n")
         }
+        output.append("    }\n\n    private let superType: [DeclarationType: DeclarationType] = [\n")
+        for (subtype, type) in parser.subtypes {
+            output.append("        .\(subtype)Type: .\(type)Type,\n")
+        }
         output.append("""
+                ]
+
+                private func isSubtype(_ subtype: DeclarationType, _ type: DeclarationType) -> Bool {
+                    var current = subtype
+                    while true {
+                        if current == type { return true }
+                        if let next = superType[subtype] {
+                            current = next
+                        } else {
+                            return false
+                        }
+                    }
                 }
 
                 private func check(_ a: Function.A, with type: DeclarationType, function: Function, stack: [TypecheckRuntime], callStack: IndexPath) throws {
@@ -392,7 +412,7 @@ struct Swift: Language {
                         guard a.level < stack.count else { throw DecodeError(cause: .stepMissing, stack: callStack) }
                         let runtime = stack[Int(a.level)]
                         if let t = runtime.results[Int(a.step)] {
-                            if t != type { throw DecodeError(cause: .stepMismatch, stack: callStack) }
+                            if !isSubtype(t, type) { throw DecodeError(cause: .stepMismatch, stack: callStack) }
                             runtime.releaseResult[Int(a.step)] = callStack[Int(a.level)]
                         } else {
                             guard a.step < function.steps.count, case .functionRaw(let f)? = function.steps[Int(a.step)].producer else { throw DecodeError(cause: .stepMissing, stack: callStack) }
@@ -423,7 +443,7 @@ struct Swift: Language {
                         let runtime = stack[Int(a.level)]
                         let number = Int(-a.step - 1)
                         guard number < runtime.arguments.count else { throw DecodeError(cause: .argumentMissing, stack: callStack) }
-                        if runtime.arguments[number] != type { throw DecodeError(cause: .argumentMismatch, stack: callStack) }
+                        if !isSubtype(runtime.arguments[number], type) { throw DecodeError(cause: .argumentMismatch, stack: callStack) }
                     }
                 }
                 

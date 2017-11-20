@@ -20,6 +20,7 @@ class Parser {
     private enum Section: String {
         case imports = "Import:"
         case types = "Type:"
+        case subtypes = "Subtype:"
         case symbols = "Symbol:"
         case functions = "Function:"
     }
@@ -28,6 +29,8 @@ class Parser {
     var imports = [String]()
     var types = [(String, DeclarationType)]()
     var typesMap = [String: DeclarationType]()
+    var subtypes = [(String, String)]()
+    var subtypesMap = [String: [String]]()
     var symbols = [(String, FunctionType)]()
     var functions = [(String, FunctionType)]()
     var argumentNumber = Set<Int>()
@@ -107,6 +110,26 @@ class Parser {
                     types.append((line, .basic(backed: true)))
                     typesMap[line] = .basic(backed: true)
                 }
+            case .subtypes:
+                let parts = line.components(separatedBy: "<:")
+                if parts.count != 2 {
+                    fatalError("Line \(i): Subtype invalid")
+                }
+                let subtype = parts[0].trimmingCharacters(in: .whitespaces)
+                let type = parts[1].trimmingCharacters(in: .whitespaces)
+                if !subtype.isValidIdentifier || !type.isValidIdentifier {
+                    fatalError("Line \(i): Type name invalid")
+                }
+                if typesMap[subtype] == nil {
+                    types.append((subtype, .basic(backed: false)))
+                    typesMap[subtype] = .basic(backed: false)
+                }
+                if typesMap[type] == nil {
+                    types.append((type, .basic(backed: false)))
+                    typesMap[type] = .basic(backed: false)
+                }
+                subtypes.append((subtype, type))
+                subtypesMap[subtype, default: []].append(type)
             case .symbols:
                 guard let index = line.index(of: "(") else {
                     fatalError("Line \(i): Expecting (")
