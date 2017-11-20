@@ -388,23 +388,23 @@ struct Swift: Language {
         for (name, _) in parser.types {
             output.append("        case \(name)Type\n")
         }
-        output.append("    }\n\n    private let superType: [DeclarationType: DeclarationType] = [\n")
-        for (subtype, type) in parser.subtypes {
-            output.append("        .\(subtype)Type: .\(type)Type,\n")
+        output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [\n")
+        for (subtype, types) in parser.subtypesMap {
+            output.append("        .\(subtype)Type: [")
+            writeCommaSeparated(types, to: &output) {
+                output.append(".\($0)Type")
+            }
+            output.append("],\n")
         }
         output.append("""
                 ]
 
                 private func isSubtype(_ subtype: DeclarationType, _ type: DeclarationType) -> Bool {
-                    var current = subtype
-                    while true {
-                        if current == type { return true }
-                        if let next = superType[subtype] {
-                            current = next
-                        } else {
-                            return false
-                        }
+                    if subtype == type { return true }
+                    for supertype in supertypes[subtype, default: []] {
+                        if isSubtype(supertype, type) { return true }
                     }
+                    return false
                 }
 
                 private func check(_ a: Function.A, with type: DeclarationType, function: Function, stack: [TypecheckRuntime], callStack: IndexPath) throws {
