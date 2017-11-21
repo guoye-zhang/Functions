@@ -652,9 +652,9 @@ struct Swift: Language {
                 if functionType.returnType != nil {
                     output.append("%\\(level):\\(i) = ")
                 }
-                output.append("\(name)(")
-                writeCommaSeparated(1...functionType.argumentTypes.count + 1, to: &output) {
-                    output.append("\\(a.o\($0))")
+                output.append("(\(name))\\(a.o1)(")
+                writeCommaSeparated(0..<functionType.argumentTypes.count, to: &output) {
+                    output.append("\\(a.o\($0 + 2))")
                 }
                 output.append(")\\n\")\n")
             }
