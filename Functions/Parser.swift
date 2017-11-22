@@ -2,7 +2,7 @@ import Foundation
 
 extension String {
     var isValidIdentifier: Bool {
-        return index(of: " ") == nil
+        return unicodeScalars.first.flatMap(CharacterSet.decimalDigits.contains) != true && rangeOfCharacter(from: CharacterSet.alphanumerics.inverted) == nil
     }
 }
 
