@@ -14,9 +14,10 @@ protocol Language {
     static var protobufTypeToNative: [String: String] { get }
 }
 
+FileManager.default.changeCurrentDirectoryPath(url.deletingLastPathComponent().path)
+let filename = URL(fileURLWithPath: url.deletingPathExtension().lastPathComponent)
+
 let parser = Parser()
 parser.parse(content)
-let protobufURL = url.deletingPathExtension().appendingPathExtension("proto")
-Protobuf(parser: parser).generate(protobufURL)
-let swiftURL = url.deletingPathExtension().appendingPathExtension("swift")
-Swift(parser: parser).generate(swiftURL)
+Protobuf(parser: parser).generate(filename.appendingPathExtension("proto"))
+Swift(parser: parser).generate(filename.appendingPathExtension("swift"))
