@@ -388,13 +388,17 @@ struct Swift: Language {
         for (name, _) in parser.types {
             output.append("        case \(name)Type\n")
         }
-        output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [\n")
-        for (subtype, types) in parser.subtypesMap {
-            output.append("        .\(subtype)Type: [")
-            writeCommaSeparated(types, to: &output) {
-                output.append(".\($0)Type")
+        if parser.subtypesMap.isEmpty {
+            output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [:")
+        } else {
+            output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [\n")
+            for (subtype, types) in parser.subtypesMap {
+                output.append("        .\(subtype)Type: [")
+                writeCommaSeparated(types, to: &output) {
+                    output.append(".\($0)Type")
+                }
+                output.append("],\n")
             }
-            output.append("],\n")
         }
         output.append("""
                 ]
