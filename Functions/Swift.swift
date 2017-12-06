@@ -362,23 +362,25 @@ struct Swift: Language {
             }
 
             private class DecoderRuntime {
-                private class Runtime<T> {
-                    var results = [Int: T]()
-                    let arguments: [T]
-                    init(arguments: [T]) {
+                private struct Runtime {
+                    var results = [Int: Any]()
+                    let arguments: [Any]
+                    init(arguments: [Any]) {
                         self.arguments = arguments
                     }
                 }
 
-                private class TypecheckRuntime: Runtime<DeclarationType> {
+                private class TypecheckRuntime {
+                    var results = [Int: DeclarationType]()
+                    let arguments: [DeclarationType]
                     let function: Function
                     let returnType: DeclarationType
                     var releaseResult: [Int]
                     init(function: Function, arguments: [DeclarationType], returnType: DeclarationType) {
                         self.function = function
+                        self.arguments = arguments
                         self.returnType = returnType
                         releaseResult = Array(0..<function.steps.count)
-                        super.init(arguments: arguments)
                     }
                 }
 
@@ -395,7 +397,7 @@ struct Swift: Language {
             output.append("        case \(name)Type\n")
         }
         if parser.subtypesMap.isEmpty {
-            output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [:")
+            output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [:]\n\n")
         } else {
             output.append("    }\n\n    private let supertypes: [DeclarationType: [DeclarationType]] = [\n")
             for (subtype, types) in parser.subtypesMap {
@@ -405,10 +407,9 @@ struct Swift: Language {
                 }
                 output.append("],\n")
             }
+            output.append("    ]\n\n")
         }
         output.append("""
-                ]
-
                 private func isSubtype(_ subtype: DeclarationType, _ type: DeclarationType) -> Bool {
                     if subtype == type { return true }
                     for supertype in supertypes[subtype, default: []] {
@@ -519,7 +520,7 @@ struct Swift: Language {
                     try typecheck(stack: [TypecheckRuntime(function: function, arguments: arguments, returnType: returnType)], codePath: [], callStack: [])
                 }
 
-                private func value(_ a: Function.A, in stack: [Runtime<Any>]) -> Any {
+                private func value(_ a: Function.A, in stack: [Runtime]) -> Any {
                     if a.step >= 0 {
                         return stack[Int(a.level)].results[Int(a.step)]!
                     } else {
@@ -530,7 +531,7 @@ struct Swift: Language {
         for (name, type) in parser.types {
             if case .function(let functionType) = type {
                 output.append("""
-                        private func \(name)Value(_ a: Function.A, in stack: [Runtime<Any>], symbols: Symbols, codePath: IndexPath) -> \(name) {
+                        private func \(name)Value(_ a: Function.A, in stack: [Runtime], symbols: Symbols, codePath: IndexPath) -> \(name) {
                             let raw = value(a, in: stack)
                             if let function = raw as? Function {
                                 let codePath = DecoderRuntime.codePath(for: a, in: codePath)
@@ -554,26 +555,27 @@ struct Swift: Language {
         }
         output.append("""
                 @discardableResult
-                private func run(function: Function, symbols: Symbols, stack: [Runtime<Any>], codePath: IndexPath) -> Any? {
-                    let runtime = stack.last!
+                private func run(function: Function, symbols: Symbols, stack: [Runtime], codePath: IndexPath) -> Any? {
+                    var stack = stack
+                    let last = stack.count - 1
                     let releaseResult = releaseResults[codePath]!
                     for (i, step) in function.steps.enumerated() {
                         switch step.producer! {
                         case .functionRaw(let raw):
-                            runtime.results[i] = raw\n
+                            stack[last].results[i] = raw\n
             """)
         for (name, type) in parser.types {
             switch type {
             case .basic(backed: true):
                 output.append("""
                                 case .\(name)Raw(let raw):
-                                    runtime.results[i] = raw\n
+                                    stack[last].results[i] = raw\n
                     """)
             case .basic(backed: false): break
             case .function(let functionType):
                 output.append("            case .\(name)(let a):\n                ")
                 if functionType.returnType != nil {
-                    output.append("runtime.results[i] = \(name)Value(a.o1, in: stack, symbols: symbols, codePath: codePath)(")
+                    output.append("stack[last].results[i] = \(name)Value(a.o1, in: stack, symbols: symbols, codePath: codePath)(")
                 } else {
                     output.append("\(name)Value(a.o1, in: stack, symbols: symbols, codePath: codePath)(")
                 }
@@ -595,7 +597,7 @@ struct Swift: Language {
                 output.append("            case .\(name):\n                ")
             }
             if functionType.returnType != nil {
-                output.append("runtime.results[i] = symbols.\(name)(")
+                output.append("stack[last].results[i] = symbols.\(name)(")
             } else {
                 output.append("symbols.\(name)(")
             }
@@ -610,7 +612,7 @@ struct Swift: Language {
         }
         output.append("""
                         }
-                        releaseResult[i]?.forEach { runtime.results[$0] = nil }
+                        releaseResult[i]?.forEach { stack[last].results[$0] = nil }
                     }
                     if !function.hasReturnStep { return nil }
                     let returnValue = value(function.returnStep, in: stack)
