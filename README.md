@@ -52,3 +52,6 @@ assert(function(1, 2, 3) == -2)
 1. Compile specification to protobuf file and source code file 1
 1. Compile protobuf file to source code file 2
 1. Add both source code file 1 and 2 to your project
+
+## Demo
+Demos mentioned in the report can be found on the [releases page](https://github.com/cc941201/Functions/releases)
